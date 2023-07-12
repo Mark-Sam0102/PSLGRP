@@ -1,0 +1,43 @@
+[
+    {
+        "name": "Amazon RDS for MySQL Server Instance",
+        "fields": [
+            {
+                "name": "db_instance_id",
+                "type": "string",
+                "value": "${db_instance_id}"
+            },
+            {
+                "name": "db_instance_username",
+                "type": "string",
+                "value": "${db_instance_username}"
+            },
+            {
+                "name": "db_instance_password",
+                "type": "string",
+                "value": "${db_instance_password}",
+                "sensitive": true
+            },
+            {
+                "name": "db_instance_address",
+                "type": "string",
+                "value": "${db_instance_address}"
+            },
+            {
+                "name": "db_instance_endpoint",
+                "type": "string",
+                "value": "${db_instance_endpoint}"
+            },
+            {
+                "name": "db_instance_name",
+                "type": "string",
+                "value": "${db_instance_id}"
+            },
+            {
+                "name": "db_instance_port",
+                "type": "string",
+                "value": "${db_instance_port}"   
+            }
+        ]
+    }
+]

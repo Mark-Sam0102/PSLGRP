@@ -1,0 +1,42 @@
+[
+    {
+        "name": "EKS cluster",
+        "fields": [
+            {
+                "name": "endpoint",
+                "type": "string",
+                "value": "${endpoint}"
+            },
+            {
+                "name": "cluster_name",
+                "type": "string",
+                "value": "${cluster_name}"
+            },
+            {
+                "name": "platform_version",
+                "type": "string",
+                "value": "${platform_version}"
+            },
+            {
+                "name": "identity-oidc-issuer",
+                "type": "string",
+                "value": "${identity-oidc-issuer}"
+            }
+        ]
+    },
+    {
+        "name": "EKS cluster network config",
+        "fields": [
+            {
+                "name": "vpc_config-subnet_ids",
+                "type": "string",
+                "value": "${vpc_config-subnet_ids}"
+            },
+            {
+                "name": "vpc_config-vpc_id",
+                "type": "string",
+                "value": "${vpc_config-vpc_id}"
+            }
+        ]
+    }
+]

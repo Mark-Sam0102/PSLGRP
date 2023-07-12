@@ -1,0 +1,7 @@
+terraform {
+backend "azurerm" {
+    resource_group_name  = "rg_pipod"
+    storage_account_name = "sa_pipod"
+    container_name       = "blob_pipod"
+  }
+}

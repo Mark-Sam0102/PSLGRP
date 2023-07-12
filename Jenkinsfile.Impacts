@@ -1,0 +1,281 @@
+// see https://github.com/coresolutions-ltd/jenkins-terraform-pipeline/blob/master/Jenkinsfile
+
+def FAILED_STAGE = 'None'
+properties([
+    parameters([
+      choice(choices:['update'],
+                description:'Deployment actions',
+                name:'action'),
+      string(defaultValue: '', description: 'DeploymentId for given deployment. Deployment id will be always same for complete lifecycle of deploy', name: 'deploymentId', trim: true),
+      string(defaultValue: '', description: 'Deployment Json with all details of json ', name: 'deploymentParameters'),
+      string(defaultValue: '', description: 'Unique id for impact analysis of given deployment Id', name: 'impactRequestId'),
+    ])
+])
+
+pipeline {
+    options {
+        skipStagesAfterUnstable()
+    }
+    
+    agent any
+
+    tools {nodejs "NodeJS"}
+
+    environment {
+        apiserver = "${env.PIPOD_API_ENDPOINT}"
+        pipodProvider = "${env.PIPOD_ACCOUNT_PROVIDER}"
+        pipodtoken = "${env.PIPOD_TOKEN}"
+        bucket = "${env.PIPOD_BUCKET}"
+        region = "${env.PIPOD_REGION}"
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    try {
+                        doCheckout()
+                    } catch (exc) {
+                        echo "Error occurred at ${env.STAGE_NAME}"
+                        //updatePipelineStatus('failed')
+                        throw exc
+                    }
+                }
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                script {
+                    try {
+                        doValidate()
+                        //doLog("${deploymentId}", 'info', 'Validation completed')
+                        echo "Validation completed"
+                    } catch (exc) {
+                        echo "Error occurred at ${env.STAGE_NAME}"
+                        //updatePipelineStatus('failed')
+                        //doLog("${deploymentId}", 'error', 'Validation failed')
+                        echo "Validation failed"
+                        throw exc
+                    }
+                }
+            }
+        }
+
+        stage('Init') {
+            steps {
+                script {
+                    try {
+                        doInit()
+                        //doLog("${deploymentId}", 'info', 'Initialization completed')
+                        echo "Initialization completed"
+                    } catch (exc) {
+                        echo "Error occurred at ${env.STAGE_NAME}"
+                        //updatePipelineStatus('failed')
+                        //doLog("${deploymentId}", 'error', 'Initialization failed')
+                        echo "Initialization failed"
+                        throw exc
+                    }
+                }
+            }
+        }
+
+        stage('CheckImpact') {
+            when { expression { params.action  == 'update' } }
+            steps {
+                sh 'npm config ls'
+                script {
+                    try {
+                        doCheckImpact()
+                        //updatePipelineStatus('complete')
+                    } catch (exc) {
+                        echo "Error occurred at ${env.STAGE_NAME}"
+                        //updatePipelineStatus('failed')
+                        throw exc
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        cleanup {
+            echo 'Deleting Directory!'
+            deleteDir()
+        }
+    }
+}
+
+// def doLog(deploymentId, info, message) {
+//     script {
+//         sh("""#!/bin/bash
+//             cd engine/scripts;
+//             . ./log.sh;
+//             writeLog -d ${deploymentId} -i ${info} -m "${message}";
+//             """)
+//     }
+//}
+
+def doCheckout() {
+    script {
+        sh "echo 'Checking out given branch…'"
+        FAILED_STAGE = env.STAGE_NAME
+
+        createEnv()
+        
+        sh("""#!/bin/bash
+            cd $deploymentId
+            cat common.auto.tfvars
+            
+        """)
+        
+        checkout scm
+    }
+}
+
+def doInit() {
+    script {
+        echo "Failed Stage : ${FAILED_STAGE}"
+        FAILED_STAGE = env.STAGE_NAME
+        
+        sh ". ${deploymentId}/provider.env 2>/dev/null;"
+        if (pipodProvider.equals('azure')) {
+            withCredentials([string(credentialsId: 'PIPOD_ACCOUNT_AZURE', variable: 'SECRET')]) {
+                sh "./engine/002-init.sh -s ${SECRET};"
+            }
+        } else if (pipodProvider.equals('aws')){
+            sh "./engine/002-init.sh;"
+        }
+        
+        sh('''#!/bin/bash
+            chmod +x engine/scripts/log.sh;
+            chmod +x engine/scripts/create-tags.sh;
+        ''')
+    }
+}
+
+def doValidate() {
+    script {
+        FAILED_STAGE = env.STAGE_NAME
+        
+        sh('''#!/bin/bash
+            . ${deploymentId}/provider.env 2>/dev/null;
+            ./engine/001-validate.sh;
+        ''')
+    }
+}
+
+def doCheckImpact() {
+    script {
+        FAILED_STAGE = env.STAGE_NAME
+        sh('''
+            chmod +x engine/008-check-changes.sh;
+            . ${deploymentId}/provider.env 2>/dev/null;
+            ./engine/008-check-changes.sh;
+        ''')
+    }
+}
+
+def createEnv() {
+    echo "In createEnv()"
+    createDeploymentDir()
+
+    sh("""
+        rm -f common.auto.tfvars deployment.auto.tfvars provider.env
+        cd ${params.deploymentId}
+        ls -l
+
+        cat > common.auto.tfvars << EOL
+        PIPOD_BUILD_ID=${BUILD_ID}
+        PIPOD_JOB_NAME=${JOB_NAME}
+        PIPOD_DEPLOYMENT_ID="${params.deploymentId}"
+        PIPOD_IMPACT_REQUEST_ID="${params.impactRequestId}"
+    """)
+
+    echo "${params.deploymentParameters}"
+    sh 'chmod +x engine/scripts/create-tfvars.sh;'
+    def json = readJSON text: "${params.deploymentParameters}"
+    json.each { key, value ->
+        sh("""#!/bin/bash
+            . ./engine/scripts/create-tfvars.sh;
+            writeToTfvarFile -k ${key} -v ${value} -d ${params.deploymentId}/deployment.auto.tfvars;
+        """)
+    }
+
+    // check the provider and load credentials accordingly
+    def provider = json['provider']
+    def accountid = json['account']
+    loadBackendAccountDetails(pipodProvider)
+    loadProviderAccountDetails(provider, accountid)
+}
+
+def createDeploymentDir() {
+    echo "In createdeplymentdir()"
+    script {
+        FAILED_STAGE = env.STAGE_NAME
+        
+        sh('''
+            mkdir -p ${deploymentId}/.aws;
+            touch ${deploymentId}/provider.env
+        ''')
+    }
+}
+
+def loadBackendAccountDetails(pipodProvider) {
+    echo "pipodProvider = $pipodProvider"
+    
+    if (pipodProvider.equals('aws')) {
+        withCredentials([[
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: 'PIPOD_ACCOUNT_AWS',
+            accessKeyVariable: 'AWSAccessKeyId',
+            secretKeyVariable: 'AWSSecretKey'
+            ]]) {
+                sh( """
+                    ls
+                    echo "[piPodBackend]" >> ${deploymentId}/.aws/credentials
+                    echo "aws_access_key_id = $AWSAccessKeyId" >> ${deploymentId}/.aws/credentials
+                    echo "aws_secret_access_key = $AWSSecretKey" >> ${deploymentId}/.aws/credentials
+                """
+                )
+            }
+    }
+}
+
+def loadProviderAccountDetails(provider, accountid) {
+    echo "provider =  $provider"
+    echo "accountid =  $accountid"
+
+    if (provider.equals('azure')) {
+        withCredentials([azureServicePrincipal("$accountid")])
+        {
+            sh( """
+                ls
+                cd ${params.deploymentId}
+                echo "set +x" >> provider.env
+                echo "export ARM_CLIENT_ID=$AZURE_CLIENT_ID" >> provider.env
+                echo "export ARM_CLIENT_SECRET=$AZURE_CLIENT_SECRET" >> provider.env
+                echo "export ARM_TENANT_ID=$AZURE_TENANT_ID" >> provider.env
+                echo "export ARM_SUBSCRIPTION_ID=$AZURE_SUBSCRIPTION_ID" >> provider.env
+                echo "set -x" >> provider.env
+            """
+            )
+        }
+    } else if (provider.equals('aws')) {
+        echo 'adding aws creds '
+        withCredentials([[
+            $class: 'AmazonWebServicesCredentialsBinding',
+            credentialsId: "$accountid",
+            accessKeyVariable: 'AWSAccessKeyId',
+            secretKeyVariable: 'AWSSecretKey'
+            ]]) {
+                sh( """
+                    ls
+                    echo "[default]" >> ${deploymentId}/.aws/credentials
+                    echo "aws_access_key_id = $AWSAccessKeyId" >> ${deploymentId}/.aws/credentials
+                    echo "aws_secret_access_key = $AWSSecretKey" >> ${deploymentId}/.aws/credentials
+                """
+                )
+            }
+    }
+}

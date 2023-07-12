@@ -1,0 +1,7 @@
+terraform {
+  backend "s3" {
+    profile = "piPodBackend"
+    shared_credentials_file = ".aws/credentials"
+  }
+  
+}

@@ -1,0 +1,20 @@
+[
+    {
+        "name": "wordpress",
+        "fields": [
+            {
+                "name": "static-website-url",
+                "type": "string",
+                "value": "http://${host}/wordpress/wp-admin",
+                "sensitive": true
+            }
+        ],
+        "users": [
+            {
+                "username": "${username}",
+                "role": "admin",
+                "password": "${password}"
+            }
+        ]
+    }
+]

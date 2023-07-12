@@ -1,0 +1,33 @@
+[
+    {
+        "name": " Amazon RDS for Microsoft SQL Server Instance",
+        "fields": [
+            {
+                "name": "db_instance_address",
+                "type": "string",
+                "value": "${db_instance_address}"
+            },
+            {
+                "name": "db_instance_endpoint",
+                "type": "string",
+                "value": "${db_instance_endpoint}"
+            },
+            {
+                "name": "db_instance_port",
+                "type": "string",
+                "value": "${db_instance_port}"
+            },
+            {
+                "name": "db_instance_username",
+                "type": "string",
+                "value": "${db_instance_username}"
+            },
+            {
+                "name": "db_instance_password",
+                "type": "string",
+                "value": "${db_instance_password}",
+                "sensitive": true
+            }
+        ]
+    }
+]
